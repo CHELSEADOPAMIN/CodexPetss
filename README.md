@@ -83,6 +83,8 @@ Open `.env` and add an OpenAI API key:
 ```text
 OPENAI_API_KEY=sk-your-key-here
 IMAGE_MODEL=gpt-image-2
+PETFORGE_DAILY_LIMIT=5
+PETFORGE_JOBS_DIR=
 ```
 
 Then start the app:
@@ -104,6 +106,9 @@ PETFORGE_DEMO_ONLY=1 npm run dev
 ```
 
 Demo mode always uses the original sample CodexPet character. It does not use the uploaded photo.
+
+By default, each client IP can generate up to 5 pets per day. Change `PETFORGE_DAILY_LIMIT` if you need a different daily cap.
+Generated files are written to the system temp directory by default, which keeps hosted deployments from trying to write into the read-only app bundle. Set `PETFORGE_JOBS_DIR` only if your host provides another writable directory.
 
 ## Simple Installation On Mac
 
@@ -308,6 +313,8 @@ cp .env.example .env
 ```text
 OPENAI_API_KEY=sk-your-key-here
 IMAGE_MODEL=gpt-image-2
+PETFORGE_DAILY_LIMIT=5
+PETFORGE_JOBS_DIR=
 ```
 
 然后启动：
@@ -329,6 +336,9 @@ PETFORGE_DEMO_ONLY=1 npm run dev
 ```
 
 demo 模式永远使用原来的 CodexPet 示例角色，不会使用你上传的新照片。
+
+默认情况下，同一个客户端 IP 每天最多生成 5 次。如果想改每日上限，可以调整 `PETFORGE_DAILY_LIMIT`。
+生成文件默认写入系统临时目录，避免部署环境尝试写入只读的应用目录。只有当部署平台提供其他可写目录时，才需要设置 `PETFORGE_JOBS_DIR`。
 
 ## 安装方式一：只安装成 Codex Pet
 

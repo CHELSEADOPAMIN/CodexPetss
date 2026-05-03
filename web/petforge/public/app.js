@@ -14,6 +14,15 @@ const serverMode = document.querySelector("#server-mode");
 let imageDataUrl = "";
 let canGenerateFromPhoto = false;
 
+function quotaText(quota) {
+  if (!quota) return "";
+  return ` Daily limit: ${quota.remaining}/${quota.limit} generations left today.`;
+}
+
+function hasQuota(quota) {
+  return !quota || quota.remaining > 0;
+}
+
 function setStages(activeName) {
   const order = ["upload", "sprite", "atlas", "download"];
   const activeIndex = order.indexOf(activeName);
@@ -50,13 +59,13 @@ async function loadStatus() {
 
     serverMode.classList.remove("ok", "warn");
     if (status.mode === "openai") {
-      serverMode.textContent = `Photo generation is enabled with ${status.imageModel}. Uploaded images will be used to create a new pet.`;
-      serverMode.classList.add("ok");
-      submit.disabled = false;
+      serverMode.textContent = `Photo generation is enabled with ${status.imageModel}. Uploaded images will be used to create a new pet.${quotaText(status.quota)}`;
+      serverMode.classList.add(hasQuota(status.quota) ? "ok" : "warn");
+      submit.disabled = !hasQuota(status.quota);
     } else if (status.mode === "demo") {
-      serverMode.textContent = "Demo mode is on. The app will use the bundled sample character, not your uploaded photo.";
+      serverMode.textContent = `Demo mode is on. The app will use the bundled sample character, not your uploaded photo.${quotaText(status.quota)}`;
       serverMode.classList.add("warn");
-      submit.disabled = false;
+      submit.disabled = !hasQuota(status.quota);
     } else {
       serverMode.textContent = "Photo generation is not enabled. Add OPENAI_API_KEY to web/petforge/.env and restart the server.";
       serverMode.classList.add("warn");
@@ -116,6 +125,7 @@ form.addEventListener("submit", async (event) => {
       ? "Demo mode: the bundled sample pet was packaged. Turn off PETFORGE_DEMO_ONLY and add OPENAI_API_KEY for real photo generation."
       : "Generated from the uploaded photo with the image API.";
     result.hidden = false;
+    loadStatus();
   } catch (error) {
     errorBox.textContent = error.message;
     errorBox.hidden = false;

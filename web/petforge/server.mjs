@@ -1,15 +1,16 @@
 import { createServer } from "node:http";
 import { spawn, spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, renameSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
 const publicDir = path.join(__dirname, "public");
-const jobsDir = path.join(__dirname, "jobs");
+const jobsDir = path.resolve(process.env.PETFORGE_JOBS_DIR || path.join(os.tmpdir(), "petforge-jobs"));
 
 const envPath = path.join(__dirname, ".env");
 if (existsSync(envPath)) {
@@ -22,6 +23,8 @@ if (existsSync(envPath)) {
 }
 
 const port = Number(process.env.PORT || 4177);
+const dailyGenerationLimit = Number(process.env.PETFORGE_DAILY_LIMIT || 5);
+const quotaPath = path.join(jobsDir, "daily-generation-quota.json");
 
 const poseNames = ["idle", "run", "wave", "jump", "crouch", "thinking", "point", "celebrate"];
 
@@ -46,6 +49,84 @@ const python = findPython();
 function sendJson(res, status, body) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
+}
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getClientAddress(req) {
+  const forwardedFor = req.headers["x-forwarded-for"];
+  const forwardedAddress = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+  const address = forwardedAddress?.split(",")[0]?.trim()
+    || req.headers["x-real-ip"]
+    || req.socket.remoteAddress
+    || "unknown";
+  return String(address).replace(/^::ffff:/, "");
+}
+
+function getClientQuotaKey(req) {
+  return createHash("sha256").update(getClientAddress(req)).digest("hex").slice(0, 32);
+}
+
+function readQuotaStore() {
+  const today = localDateKey();
+  if (!existsSync(quotaPath)) return { date: today, clients: {} };
+
+  try {
+    const store = JSON.parse(readFileSync(quotaPath, "utf8"));
+    if (store?.date === today && store?.clients && typeof store.clients === "object") {
+      return store;
+    }
+  } catch {
+    // A malformed quota file should not block the app; start a fresh daily window.
+  }
+
+  return { date: today, clients: {} };
+}
+
+function writeQuotaStore(store) {
+  mkdirSync(jobsDir, { recursive: true });
+  const tmpPath = `${quotaPath}.tmp`;
+  writeFileSync(tmpPath, `${JSON.stringify(store, null, 2)}\n`);
+  renameSync(tmpPath, quotaPath);
+}
+
+function getQuotaStatus(req) {
+  const limit = Number.isFinite(dailyGenerationLimit) && dailyGenerationLimit > 0 ? dailyGenerationLimit : 5;
+  const store = readQuotaStore();
+  const key = getClientQuotaKey(req);
+  const used = Number(store.clients[key]?.count || 0);
+  return {
+    limit,
+    used,
+    remaining: Math.max(0, limit - used),
+    resetsOn: store.date
+  };
+}
+
+function consumeGenerationQuota(req) {
+  const status = getQuotaStatus(req);
+  if (status.remaining <= 0) return { ok: false, ...status };
+
+  const store = readQuotaStore();
+  const key = getClientQuotaKey(req);
+  const current = store.clients[key] || { count: 0 };
+  current.count = Number(current.count || 0) + 1;
+  current.lastSeenAt = new Date().toISOString();
+  store.clients[key] = current;
+  writeQuotaStore(store);
+
+  return {
+    ok: true,
+    limit: status.limit,
+    used: current.count,
+    remaining: Math.max(0, status.limit - current.count),
+    resetsOn: store.date
+  };
 }
 
 function sendFile(res, filePath) {
@@ -257,21 +338,31 @@ async function createPetPackage({ dataUrl, petId, displayName, styleNote }) {
 async function handleGenerate(req, res) {
   try {
     const body = JSON.parse(await readBody(req));
+    const quota = consumeGenerationQuota(req);
+    if (!quota.ok) {
+      sendJson(res, 429, {
+        error: `Daily generation limit reached. Each person can generate up to ${quota.limit} pets per day. Please try again tomorrow.`,
+        quota
+      });
+      return;
+    }
+
     const result = await createPetPackage(body);
-    sendJson(res, 200, result);
+    sendJson(res, 200, { ...result, quota });
   } catch (error) {
     sendJson(res, 400, { error: error.message });
   }
 }
 
-function handleStatus(res) {
+function handleStatus(req, res) {
   const demoOnly = process.env.PETFORGE_DEMO_ONLY === "1";
   sendJson(res, 200, {
     hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
     demoOnly,
     canGenerateFromPhoto: Boolean(process.env.OPENAI_API_KEY) && !demoOnly,
     mode: demoOnly ? "demo" : process.env.OPENAI_API_KEY ? "openai" : "missing-key",
-    imageModel: process.env.IMAGE_MODEL || "gpt-image-2"
+    imageModel: process.env.IMAGE_MODEL || "gpt-image-2",
+    quota: getQuotaStatus(req)
   });
 }
 
@@ -279,7 +370,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (req.method === "GET" && url.pathname === "/api/status") {
-    handleStatus(res);
+    handleStatus(req, res);
     return;
   }
 
