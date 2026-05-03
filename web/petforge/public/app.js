@@ -50,7 +50,7 @@ async function loadStatus() {
 
     serverMode.classList.remove("ok", "warn");
     if (status.mode === "openai") {
-      serverMode.textContent = "Photo generation is enabled. Uploaded images will be used to create a new pet.";
+      serverMode.textContent = `Photo generation is enabled with ${status.imageModel}. Uploaded images will be used to create a new pet.`;
       serverMode.classList.add("ok");
       submit.disabled = false;
     } else if (status.mode === "demo") {

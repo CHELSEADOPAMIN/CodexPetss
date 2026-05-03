@@ -82,6 +82,7 @@ Open `.env` and add an OpenAI API key:
 
 ```text
 OPENAI_API_KEY=sk-your-key-here
+IMAGE_MODEL=gpt-image-2
 ```
 
 Then start the app:
@@ -306,6 +307,7 @@ cp .env.example .env
 
 ```text
 OPENAI_API_KEY=sk-your-key-here
+IMAGE_MODEL=gpt-image-2
 ```
 
 然后启动：

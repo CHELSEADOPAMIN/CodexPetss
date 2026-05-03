@@ -44,6 +44,34 @@ def trim_alpha(image: Image.Image) -> Image.Image:
     return image.crop(bbox)
 
 
+def remove_flat_background(image: Image.Image, tolerance: int = 26) -> Image.Image:
+    """Make a flat corner background transparent.
+
+    This is mainly for gpt-image-2, which may return a plain light background
+    instead of transparent pixels. It samples the four corners and removes
+    pixels close to the brightest corner color.
+    """
+    image = image.convert("RGBA")
+    pixels = image.load()
+    corners = [
+        pixels[0, 0],
+        pixels[image.width - 1, 0],
+        pixels[0, image.height - 1],
+        pixels[image.width - 1, image.height - 1],
+    ]
+    bg = max(corners, key=lambda px: px[0] + px[1] + px[2])
+
+    for y in range(image.height):
+        for x in range(image.width):
+            r, g, b, a = pixels[x, y]
+            if a == 0:
+                continue
+            distance = max(abs(r - bg[0]), abs(g - bg[1]), abs(b - bg[2]))
+            if distance <= tolerance and r + g + b > 600:
+                pixels[x, y] = (r, g, b, 0)
+    return image
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("sheet", type=Path)
@@ -61,6 +89,7 @@ def main() -> None:
 
     for pose, (col, row) in pose_map.items():
         crop = image.crop((col * cell_w, row * cell_h, (col + 1) * cell_w, (row + 1) * cell_h))
+        crop = remove_flat_background(crop)
         crop = trim_alpha(crop)
         crop.save(args.out / f"{pose}.png")
 

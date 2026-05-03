@@ -114,7 +114,7 @@ function petPrompt(styleNote) {
     "Use consistent proportions and the same character design in every frame.",
     "Arrange the result as a 4 columns x 4 rows sprite sheet with generous spacing.",
     "The first two rows must include: idle standing, running right, waving, jumping, crouching or failed, thinking or waiting, pointing or reviewing, celebrating.",
-    "Use a transparent background if possible, no labels, no text, no UI, no frame borders, crisp pixel-art edges.",
+    "Use a transparent background if the model supports it; otherwise use one flat near-white background color that can be removed cleanly. No labels, no text, no UI, no frame borders, crisp pixel-art edges.",
     styleNote ? `Additional style notes: ${styleNote}` : ""
   ].filter(Boolean).join("\n");
 }
@@ -128,14 +128,15 @@ async function generateSpriteSheet({ sourcePath, mime, outPath, styleNote }) {
     throw new Error("OPENAI_API_KEY is not set. Add it to web/petforge/.env, then restart the server. Without an API key, the app cannot generate a new character from your uploaded photo.");
   }
 
+  const imageModel = process.env.IMAGE_MODEL || "gpt-image-2";
   const input = readFileSync(sourcePath);
   const form = new FormData();
-  form.set("model", "gpt-image-1.5");
+  form.set("model", imageModel);
   form.set("image", new File([input], path.basename(sourcePath), { type: mime }));
   form.set("prompt", petPrompt(styleNote));
   form.set("size", "1024x1024");
   form.set("quality", "low");
-  form.set("background", "transparent");
+  form.set("background", imageModel === "gpt-image-2" ? "auto" : "transparent");
   form.set("output_format", "png");
 
   const response = await fetch("https://api.openai.com/v1/images/edits", {
@@ -152,7 +153,7 @@ async function generateSpriteSheet({ sourcePath, mime, outPath, styleNote }) {
   if (!b64) throw new Error("Image generation returned no image.");
 
   writeFileSync(outPath, Buffer.from(b64, "base64"));
-  return { mode: "openai", model: "gpt-image-1.5" };
+  return { mode: "openai", model: imageModel };
 }
 
 function copyDemoPoses(outDir) {
@@ -269,7 +270,8 @@ function handleStatus(res) {
     hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
     demoOnly,
     canGenerateFromPhoto: Boolean(process.env.OPENAI_API_KEY) && !demoOnly,
-    mode: demoOnly ? "demo" : process.env.OPENAI_API_KEY ? "openai" : "missing-key"
+    mode: demoOnly ? "demo" : process.env.OPENAI_API_KEY ? "openai" : "missing-key",
+    imageModel: process.env.IMAGE_MODEL || "gpt-image-2"
   });
 }
 
