@@ -40,6 +40,14 @@ body {
   margin-bottom: 28px;
 }
 
+.intro-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
@@ -61,6 +69,35 @@ body {
     14px 0 0 var(--green),
     0 14px 0 var(--red),
     14px 14px 0 var(--line);
+}
+
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-left: auto;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 2px solid var(--line);
+  background: var(--ink);
+  color: #fff9e8;
+  box-shadow: 4px 4px 0 var(--line);
+  font: 900 14px/1 ui-sans-serif, system-ui, sans-serif;
+  text-decoration: none;
+}
+
+.github-link svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+  flex: 0 0 auto;
+}
+
+.github-link:hover,
+.github-link:focus-visible {
+  background: var(--blue);
+  outline: none;
+  transform: translate(-1px, -1px);
 }
 
 h1 {
@@ -364,5 +401,9 @@ code {
 
   .dropzone {
     min-height: 210px;
+  }
+
+  .intro-top {
+    align-items: stretch;
   }
 }
